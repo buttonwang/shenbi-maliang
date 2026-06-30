@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>客户跟进管理工具</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    .dialog-overlay { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+    .fade-in { animation: fadeIn 0.2s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    .slide-up { animation: slideUp 0.3s ease-out; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .toast { animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2.7s forwards; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+
+  <!-- Main Container -->
+  <div class="max-w-5xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">客户跟进管理</h1>
+        <p class="text-sm text-gray-500 mt-1">记录每一个客户，不遗漏任何机会</p>
+      </div>
+      <button onclick="openDialog()" class="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        添加客户
+      </button>
+    </div>
+
+    <!-- Search & Filter -->
+    <div class="bg-white rounded-xl border border-gray-200 p-4 mb-6 shadow-sm">
+      <div class="flex flex-col sm:flex-row gap-4">
+        <div class="relative flex-1">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input type="text" id="search-input" placeholder="搜索姓名或电话..." 
+                 class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                 oninput="renderCustomers()">
+        </div>
+        <div class="flex gap-2">
+          <button id="filter-today" onclick="setFilter('today')" class="px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+            今日待联系
+          </button>
+          <button id="filter-all" onclick="setFilter('all')" class="px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-200 bg-blue-50 text-blue-700 border-blue-200">
+            全部
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+        <p class="text-sm font-medium text-gray-500">总客户数</p>
+        <p id="stat-total" class="text-2xl font-bold text-gray-900 mt-1">0</p>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+        <p class="text-sm font-medium text-gray-500">今日待联系</p>
+        <p id="stat-today" class="text-2xl font-bold text-orange-600 mt-1">0</p>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+        <p class="text-sm font-medium text-gray-500">跟进中</p>
+        <p id="stat-following" class="text-2xl font-bold text-blue-600 mt-1">0</p>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+        <p class="text-sm font-medium text-gray-500">已成交</p>
+        <p id="stat-dealed" class="text-2xl font-bold text-green-600 mt-1">0</p>
+      </div>
+    </div>
+
+    <!-- Customer List -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-gray-100 bg-gray-50">
+              <th class="h-12 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">姓名</th>
+              <th class="h-12 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden sm:table-cell">电话</th>
+              <th class="h-12 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">下次联系</th>
+              <th class="h-12 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">状态</th>
+              <th class="h-12 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">操作</th>
+            </tr>
+          </thead>
+          <tbody id="customer-list" class="divide-y divide-gray-100">
+            <!-- Customer rows will be rendered here -->
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Empty State -->
+      <div id="empty-state" class="hidden py-16 text-center">
+        <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        <h3 class="text-lg font-semibold text-gray-900 mb-1">暂无客户数据</h3>
+        <p class="text-sm text-gray-500 mb-4">点击上方按钮添加第一个客户</p>
+        <button onclick="openDialog()" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          添加客户
+        </button>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="pagination" class="flex items-center justify-between mt-4 text-sm text-gray-500">
+      <span id="page-info">共 0 条记录</span>
+      <div class="flex gap-1" id="page-buttons">
+        <!-- Page buttons will be rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Dialog Overlay -->
+  <div id="dialog-overlay" class="fixed inset-0 z-50 hidden">
+    <div class="dialog-overlay absolute inset-0" onclick="closeDialog()"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md z-10">
+      <div class="bg-white rounded-2xl shadow-xl fade-in">
+        <div class="flex items-center justify-between p-4 border-b border-gray-100">
+          <h2 id="dialog-title" class="text-lg font-semibold text-gray-900">添加客户</h2>
+          <button onclick="closeDialog()" class="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <form id="customer-form" class="p-4 space-y-4">
+          <input type="hidden" id="customer-id">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-sm font-medium text-gray-700">姓名 <span class="text-red-500">*</span></label>
+              <input type="text" id="customer-name" required 
+                     class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                     placeholder="请输入姓名">
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-sm font-medium text-gray-700">电话 <span class="text-red-500">*</span></label>
+              <input type="tel" id="customer-phone" required 
+                     class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                     placeholder="请输入电话">
+            </div>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-gray-700">邮箱</label>
+            <input type="email" id="customer-email" 
+                   class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                   placeholder="请输入邮箱（选填）">
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-sm font-medium text-gray-700">最后联系</label>
+              <input type="date" id="customer-last-contact" 
+                     class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-sm font-medium text-gray-700">下次联系</label>
+              <input type="date" id="customer-next-contact" 
+                     class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-gray-700">状态 <span class="text-red-500">*</span></label>
+            <select id="customer-status" required 
+                    class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
+              <option value="pending">待联系</option>
+              <option value="following">跟进中</option>
+              <option value="dealed">已成交</option>
+              <option value="abandoned">已放弃</option>
+            </select>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-gray-700">备注</label>
+            <textarea id="customer-note" rows="3"
+                      class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      placeholder="其他备注信息（选填）"></textarea>
+          </div>
+          <div class="flex justify-end gap-3 pt-2">
+            <button type="button" onclick="closeDialog()" class="px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+              取消
+            </button>
+            <button type="submit" class="px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+              保存
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Dialog -->
+  <div id="delete-dialog" class="fixed inset-0 z-50 hidden">
+    <div class="dialog-overlay absolute inset-0" onclick="closeDeleteDialog()"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm z-10">
+      <div class="bg-white rounded-2xl shadow-xl fade-in p-6 text-center">
+        <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">确认删除</h3>
+        <p class="text-sm text-gray-500 mb-6">确定要删除这个客户吗？此操作无法撤销。</p>
+        <div class="flex gap-3">
+          <button onclick="closeDeleteDialog()" class="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+            取消
+          </button>
+          <button onclick="confirmDelete()" class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+            删除
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Data
+    let customers = JSON.parse(localStorage.getItem('customers') || '[]');
+    let currentFilter = 'all';
+    let currentPage = 1;
+    const pageSize = 10;
+    let deleteTargetId = null;
+
+    // Status mapping
+    const statusMap = {
+      'pending': { label: '待联系', class: 'bg-yellow-100 text-yellow-800' },
+      'following': { label: '跟进中', class: 'bg-blue-100 text-blue-800' },
+      'dealed': { label: '已成交', class: 'bg-green-100 text-green-800' },
+      'abandoned': { label: '已放弃', class: 'bg-gray-100 text-gray-600' }
+    };
+
+    // Save data
+    function saveData() {
+      localStorage.setItem('customers', JSON.stringify(customers));
+    }
+
+    // Show toast
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+      toast.className = `toast flex items-center gap-2 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg`;
+      toast.innerHTML = `
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          ${type === 'success' 
+            ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>'
+            : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>'}
+        </svg>
+        <span class="text-sm font-medium">${message}</span>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Format date
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const targetDate = new Date(dateStr);
+      targetDate.setHours(0, 0, 0, 0);
+      
+      if (targetDate.getTime() === today.getTime()) return '<span class="text-orange-600 font-medium">今天</span>';
+      if (targetDate.getTime() === tomorrow.getTime()) return '明天';
+      return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+    }
+
+    // Update stats
+    function updateStats() {
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('stat-total').textContent = customers.length;
+      document.getElementById('stat-today').textContent = customers.filter(c => c.nextContact === today).length;
+      document.getElementById('stat-following').textContent = customers.filter(c => c.status === 'following').length;
+      document.getElementById('stat-dealed').textContent = customers.filter(c => c.status === 'dealed').length;
+    }
+
+    // Filter customers
+    function getFilteredCustomers() {
+      const search = document.getElementById('search-input').value.toLowerCase();
+      const today = new Date().toISOString().split('T')[0];
+      
+      return customers.filter(c => {
+        const matchSearch = !search || c.name.toLowerCase().includes(search) || c.phone.includes(search);
+        const matchFilter = currentFilter === 'all' || (currentFilter === 'today' && c.nextContact === today);
+        return matchSearch && matchFilter;
+      });
+    }
+
+    // Set filter
+    function setFilter(filter) {
+      currentFilter = filter;
+      currentPage = 1;
+      document.getElementById('filter-today').className = filter === 'today' 
+        ? 'px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-50 text-blue-700 border border-blue-200'
+        : 'px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors';
+      document.getElementById('filter-all').className = filter === 'all' 
+        ? 'px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-50 text-blue-700 border border-blue-200'
+        : 'px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors';
+      renderCustomers();
+    }
+
+    // Render customers
+    function renderCustomers() {
+      const filtered = getFilteredCustomers();
+      const list = document.getElementById('customer-list');
+      const emptyState = document.getElementById('empty-state');
+      const pagination = document.getElementById('pagination');
+      
+      if (filtered.length === 0) {
+        list.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        pagination.classList.add('hidden');
+        return;
+      }
+      
+      emptyState.classList.add('hidden');
+      pagination.classList.remove('hidden');
+      
+      // Pagination
+      const totalPages = Math.ceil(filtered.length / pageSize);
+      const start = (currentPage - 1) * pageSize;
+      const end = start + pageSize;
+      const pageCustomers = filtered.slice(start, end);
+      
+      document.getElementById('page-info').textContent = `共 ${filtered.length} 条记录`;
+      
+      // Render page buttons
+      let pageButtons = '';
+      for (let i = 1; i <= totalPages; i++) {
+        pageButtons += `<button onclick="goToPage(${i})" class="px-3 py-1.5 text-sm font-medium rounded ${i === currentPage ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}">${i}</button>`;
+      }
+      document.getElementById('page-buttons').innerHTML = pageButtons;
+      
+      // Render rows
+      list.innerHTML = pageCustomers.map(c => {
+        const status = statusMap[c.status];
+        return `
+          <tr class="hover:bg-gray-50 transition-colors">
+            <td class="px-4 py-3">
+              <div class="font-medium text-gray-900">${c.name}</div>
+              <div class="text-sm text-gray-500 sm:hidden">${c.phone}</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600 hidden sm:table-cell">${c.phone}</td>
+            <td class="px-4 py-3 hidden md:table-cell">${formatDate(c.nextContact)}</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.class}">
+                ${status.label}
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="flex gap-2">
+                <button onclick="editCustomer('${c.id}')" class="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="编辑">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <button onclick="openDeleteDialog('${c.id}')" class="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="删除">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Go to page
+    function goToPage(page) {
+      currentPage = page;
+      renderCustomers();
+    }
+
+    // Open dialog
+    function openDialog(customerId = null) {
+      const dialog = document.getElementById('dialog-overlay');
+      const title = document.getElementById('dialog-title');
+      const form = document.getElementById('customer-form');
+      
+      form.reset();
+      document.getElementById('customer-id').value = '';
+      
+      if (customerId) {
+        title.textContent = '编辑客户';
+        const customer = customers.find(c => c.id === customerId);
+        if (customer) {
+          document.getElementById('customer-id').value = customer.id;
+          document.getElementById('customer-name').value = customer.name;
+          document.getElementById('customer-phone').value = customer.phone;
+          document.getElementById('customer-email').value = customer.email || '';
+          document.getElementById('customer-last-contact').value = customer.lastContact || '';
+          document.getElementById('customer-next-contact').value = customer.nextContact || '';
+          document.getElementById('customer-status').value = customer.status;
+          document.getElementById('customer-note').value = customer.note || '';
+        }
+      } else {
+        title.textContent = '添加客户';
+      }
+      
+      dialog.classList.remove('hidden');
+      document.getElementById('customer-name').focus();
+    }
+
+    // Close dialog
+    function closeDialog() {
+      document.getElementById('dialog-overlay').classList.add('hidden');
+    }
+
+    // Edit customer
+    function editCustomer(id) {
+      openDialog(id);
+    }
+
+    // Delete dialog
+    function openDeleteDialog(id) {
+      deleteTargetId = id;
+      document.getElementById('delete-dialog').classList.remove('hidden');
+    }
+
+    function closeDeleteDialog() {
+      deleteTargetId = null;
+      document.getElementById('delete-dialog').classList.add('hidden');
+    }
+
+    function confirmDelete() {
+      if (deleteTargetId) {
+        customers = customers.filter(c => c.id !== deleteTargetId);
+        saveData();
+        updateStats();
+        renderCustomers();
+        showToast('删除成功');
+      }
+      closeDeleteDialog();
+    }
+
+    // Form submit
+    document.getElementById('customer-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const id = document.getElementById('customer-id').value;
+      const customerData = {
+        name: document.getElementById('customer-name').value.trim(),
+        phone: document.getElementById('customer-phone').value.trim(),
+        email: document.getElementById('customer-email').value.trim(),
+        lastContact: document.getElementById('customer-last-contact').value,
+        nextContact: document.getElementById('customer-next-contact').value,
+        status: document.getElementById('customer-status').value,
+        note: document.getElementById('customer-note').value.trim()
+      };
+      
+      if (id) {
+        // Update
+        const index = customers.findIndex(c => c.id === id);
+        if (index !== -1) {
+          customers[index] = { ...customers[index], ...customerData };
+          showToast('更新成功');
+        }
+      } else {
+        // Create
+        customerData.id = Date.now().toString();
+        customers.unshift(customerData);
+        showToast('添加成功');
+      }
+      
+      saveData();
+      updateStats();
+      renderCustomers();
+      closeDialog();
+    });
+
+    // Keyboard events
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeDialog();
+        closeDeleteDialog();
+      }
+    });
+
+    // Init
+    updateStats();
+    renderCustomers();
+  </script>
+</body>
+</html>
