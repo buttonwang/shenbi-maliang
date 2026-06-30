@@ -1,0 +1,16 @@
+{
+  "name": "客户管理系统",
+  "short_name": "业务助手",
+  "description": "业务助手 - 客户管理和订单管理系统",
+  "start_url": "./客户管理系统-侧边栏演示.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233b82f6'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>业</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
